@@ -32,11 +32,20 @@ def get_transcript(video_id: str):
         return " ".join([chunk['text'] for chunk in transcript])
     except Exception as e:
         print(f"Transcript error for {video_id}: {e}")
+        return None
 
-def chunk_text(text: str, chunk_size: int = 500) -> list[str]:
+def chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str]:
     words = text.split()
     chunks = []
-    for i in range(0, len(words), chunk_size - 50):
+    for i in range(0, len(words), chunk_size - overlap):
         chunk = " ".join(words[i:i + chunk_size])
-        chunks.append(chunk)
+        if chunk.strip():
+            chunks.append(chunk)
     return chunks
+
+def get_embedding(text: str) -> list:
+    response = client.embeddings.create(
+        model="text_embedding-3-small",
+        input=text
+    )
+    return response.data[0].embedding
