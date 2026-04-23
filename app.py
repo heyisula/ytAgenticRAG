@@ -32,3 +32,11 @@ def get_transcript(video_id: str):
         return " ".join([chunk['text'] for chunk in transcript])
     except Exception as e:
         print(f"Transcript error for {video_id}: {e}")
+
+def chunk_text(text: str, chunk_size: int = 500) -> list[str]:
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), chunk_size - 50):
+        chunk = " ".join(words[i:i + chunk_size])
+        chunks.append(chunk)
+    return chunks
