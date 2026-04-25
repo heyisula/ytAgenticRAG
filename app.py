@@ -1,5 +1,6 @@
 import sys
 import youtube_transcript_api
+from typing import Any
 import time
 import random
 import os
@@ -20,10 +21,10 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 chroma_client = chromadb.Client()
 collection = chroma_client.get_or_create_collection("youtube_channel")
 def get_channel_video_ids(channel_url: str) -> list[str]:
-    ydl_opts = {
+    ydl_opts: dict[str, Any] = {
         'extract_flat': True,
         'quiet': True,
-        'playlistend': 20,
+        'playlistend': 5,
         'http_headers': {
             'User-Agent': 'Mozilla/5.0'
         }
@@ -34,15 +35,19 @@ def get_channel_video_ids(channel_url: str) -> list[str]:
         return [entry['id'] for entry in entries if entry]
 
 def get_transcript(video_id: str, retries=3):
+    cookies_file = "cookies.txt" if os.path.exists("cookies.txt") else None
+    
     for attempt in range(retries):
         try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            if cookies_file:
+                transcript = YouTubeTranscriptApi.get_transcript(video_id, cookies=cookies_file)
+            else:
+                transcript = YouTubeTranscriptApi.get_transcript(video_id)
             return " ".join([chunk['text'] for chunk in transcript])
-
         except Exception as e:
             print(f"Attempt {attempt+1} failed for {video_id}: {e}")
-            time.sleep(2 ** attempt)  # exponential backoff
-
+            sleep_time = (2 ** attempt) + random.uniform(2, 5)  # longer backoff
+            time.sleep(sleep_time)
     return None
 
 def chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str]:
@@ -54,7 +59,7 @@ def chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str]
             chunks.append(chunk)
     return chunks
 
-def get_embeddings(texts: list[str]) -> list[list[float]]:
+def get_embeddings(texts: list[str]) -> list[Any]:
     response = client.embeddings.create(
         model="text-embedding-ada-002",
         input=texts
@@ -107,8 +112,11 @@ def query_channel(question: str) -> dict:
         n_results=5
     )
 
-    context = "\n\n".join(results["documents"][0])
-    sources = [m["url"] for m in results["metadatas"][0]]
+    docs = results.get("documents")
+    context = "\n\n".join(docs[0]) if docs and docs[0] else ""
+
+    metas = results.get("metadatas")
+    sources = [str(m.get("url")) for m in metas[0] if m] if metas and metas[0] else []
 
     prompt = f"""Answer the question using ONLY the youtube transcript context below. Include which video(s) the answer came from.
 
