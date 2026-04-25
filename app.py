@@ -55,23 +55,35 @@ def index_chanel (chanel_url: str):
     video_ids = get_channel_video_ids(chanel_url)
     print(f"Found {len(video_ids)} videos")
 
-    indexed = 0
+    video_count = 0
+    chunk_count = 0
+
     for video_id in video_ids:
         print(f"Processing video {video_id}...")
         transcript = get_transcript(video_id)
-        if transcript:
+        if not transcript:
             continue
 
         chunks = chunk_text(transcript)
-        for i, chunk in enumerate(chunks):
-            embedding = get_embedding(chunk)
-            collection.add(
-                documents=[chunk],
-                embeddings=[embedding],
-                ids=[f"{video_id}_chunk_{i}"],
-                metadatas=[{"video_id": video_id,
-                            "url": f"https://www.youtube.com/watch?v={video_id}"}]
-            )
-            indexed += 1
-            print(f" Indexed Video {indexed}/{len(video_ids)}: {video_id}")
-            print(f" Indexed {indexed} videos successfully")
+        embeddings = get_embeddings(chunks)
+        ids = [f"{video_id}_chunk_{i}" for i in range(len(chunks))]
+
+        collection.add(
+            documents=chunks,
+            embeddings=embeddings,
+            ids=ids,
+            metadatas=[
+                {
+                    "video_id": video_id,
+                    "url": f"https://www.youtube.com/watch?v={video_id}"
+                }
+                for _ in chunks
+            ]
+        )
+
+        video_count += 1
+        chunk_count += len(chunks)
+
+        print(f"Indexed video {video_count}/{len(video_ids)}: {video_id}")
+    
+    print(f"\nDone. Indexed {video_count} videos and {chunk_count} chunks.")
