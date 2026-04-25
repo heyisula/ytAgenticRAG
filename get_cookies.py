@@ -2,18 +2,28 @@ from selenium import webdriver
 import time
 
 def export_youtube_cookies():
-    print("Launching Microsoft Edge...")
-    driver = webdriver.Edge()
+    print("Launching Microsoft Edge (Stealth Mode)...")
+    
+    options = webdriver.EdgeOptions()
+    # Bypass Google's anti-automation detection
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+    
+    driver = webdriver.Edge(options=options)
+    
+    # Hide the WebDriver flag
+    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+        "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+    })
     
     print("\nNavigating to YouTube...")
-    driver.get("https://www.youtube.com")
+    driver.get("https://accounts.google.com/ServiceLogin?service=youtube&hl=en&continue=https%3A%2F%2Fwww.youtube.com%2F")
     
     print("\n[!] ACTION REQUIRED:")
-    print("1. A browser window has opened.")
-    print("2. Please 'Accept All' cookies if it asks.")
-    print("3. Optional: Log into your account if you want.")
+    print("1. A browser window has opened to the Google Sign-in page.")
+    print("2. Please sign into your account.")
     
-    input("\nPress ENTER here in the terminal when you are fully loaded into YouTube...")
+    input("\nPress ENTER here in the terminal when you are fully logged in and on YouTube...")
     
     cookies = driver.get_cookies()
     netscape_str = "# Netscape HTTP Cookie File\n"

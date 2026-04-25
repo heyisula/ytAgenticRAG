@@ -34,19 +34,57 @@ def get_channel_video_ids(channel_url: str) -> list[str]:
         entries = info.get('entries', [])
         return [entry['id'] for entry in entries if entry]
 
+import http.cookiejar
+import requests
+import tempfile
+
 def get_transcript(video_id: str, retries=3):
     cookies_file = "cookies.txt" if os.path.exists("cookies.txt") else None
     
+    session = None
+    if cookies_file:
+        try:
+            session = requests.Session()
+            cj = http.cookiejar.MozillaCookieJar(cookies_file)
+            cj.load()
+            session.cookies.update(cj)
+        except Exception as e:
+            print(f"Error loading cookies: {e}")
+            session = None
+
     for attempt in range(retries):
         try:
-            if cookies_file:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id, cookies=cookies_file)
-            else:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            api = YouTubeTranscriptApi(http_client=session) if session else YouTubeTranscriptApi()
+            transcript = api.fetch(video_id, languages=['en'])
             return " ".join([chunk['text'] for chunk in transcript])
         except Exception as e:
-            print(f"Attempt {attempt+1} failed for {video_id}: {e}")
-            sleep_time = (2 ** attempt) + random.uniform(2, 5)  # longer backoff
+            print(f"Attempt {attempt+1} failed for {video_id} using standard API: {type(e).__name__}")
+            if attempt == retries - 1:
+                print(f"--> Falling back to OpenAI Whisper for {video_id}...")
+                try:
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        ydl_opts = {
+                            'format': 'm4a/bestaudio/best',
+                            'outtmpl': os.path.join(temp_dir, '%(id)s.%(ext)s'),
+                            'quiet': True,
+                        }
+                        if cookies_file:
+                            ydl_opts['cookiefile'] = cookies_file
+                            
+                        with YoutubeDL(ydl_opts) as ydl:
+                            ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+                        
+                        audio_path = os.path.join(temp_dir, f"{video_id}.m4a")
+                        with open(audio_path, "rb") as audio_file:
+                            transcription = client.audio.transcriptions.create(
+                                model="whisper-1", 
+                                file=audio_file
+                            )
+                        return transcription.text
+                except Exception as ex:
+                    print(f"Whisper fallback failed for {video_id}: {ex}")
+                    return None
+            sleep_time = (2 ** attempt) + random.uniform(2, 5)
             time.sleep(sleep_time)
     return None
 
