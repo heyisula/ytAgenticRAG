@@ -49,3 +49,29 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
         input=texts
     )
     return [item.embedding for item in response.data]
+
+def index_chanel (chanel_url: str):
+    print(f"Fetching video IDs from {chanel_url}...")
+    video_ids = get_channel_video_ids(chanel_url)
+    print(f"Found {len(video_ids)} videos")
+
+    indexed = 0
+    for video_id in video_ids:
+        print(f"Processing video {video_id}...")
+        transcript = get_transcript(video_id)
+        if transcript:
+            continue
+
+        chunks = chunk_text(transcript)
+        for i, chunk in enumerate(chunks):
+            embedding = get_embedding(chunk)
+            collection.add(
+                documents=[chunk],
+                embeddings=[embedding],
+                ids=[f"{video_id}_chunk_{i}"],
+                metadatas=[{"video_id": video_id,
+                            "url": f"https://www.youtube.com/watch?v={video_id}"}]
+            )
+            indexed += 1
+            print(f" Indexed Video {indexed}/{len(video_ids)}: {video_id}")
+            print(f" Indexed {indexed} videos successfully")
