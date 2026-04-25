@@ -13,8 +13,7 @@ if not OPENAI_API_KEY:
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 chroma_client = chromadb.Client()
-collection = chroma_client.create_collection("youtube_channel")
-
+collection = chroma_client.get_or_create_collection("youtube_channel")
 def get_channel_video_ids(channel_url: str) -> list[str]:
     ydl_opts = {
         'extract_flat': True,
@@ -88,15 +87,39 @@ def index_chanel (chanel_url: str):
     
     print(f"\nDone. Indexed {video_count} videos and {chunk_count} chunks.")
 
-def query_channel (question: str) -> dict:
-    q_embedding = get_embedding (question)
+def query_channel(question: str) -> dict:
+    q_embedding = get_embeddings([question])[0]
+
     results = collection.query(
         query_embeddings=[q_embedding],
         n_results=5
     )
-    context = "\n\n.join(results["documents"][0])"
+
+    context = "\n\n".join(results["documents"][0])
     sources = [m["url"] for m in results["metadatas"][0]]
 
-    prompt = f"""Answer the question using the ONLT the youtube transcript context below. Include which video(s) the answer came from.
-    Context:
-    {context}
+    prompt = f"""Answer the question using ONLY the youtube transcript context below. Include which video(s) the answer came from.
+
+Context:
+{context}
+
+Question: {question}
+Answer:"""
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    return {
+        "answer": response.choices[0].message.content,
+        "sources": list(set(sources))
+    }
+
+
+# Testing
+index_chanel("https://www.youtube.com/@TechWithTim/videos")
+result = query_channel("What is the best way to learn Python?")
+
+print("Answer:", result["answer"])
+print("Sources:", result["sources"])
