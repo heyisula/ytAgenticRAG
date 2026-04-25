@@ -87,3 +87,16 @@ def index_chanel (chanel_url: str):
         print(f"Indexed video {video_count}/{len(video_ids)}: {video_id}")
     
     print(f"\nDone. Indexed {video_count} videos and {chunk_count} chunks.")
+
+def query_channel (question: str) -> dict:
+    q_embedding = get_embedding (question)
+    results = collection.query(
+        query_embeddings=[q_embedding],
+        n_results=5
+    )
+    context = "\n\n.join(results["documents"][0])"
+    sources = [m["url"] for m in results["metadatas"][0]]
+
+    prompt = f"""Answer the question using the ONLT the youtube transcript context below. Include which video(s) the answer came from.
+    Context:
+    {context}
