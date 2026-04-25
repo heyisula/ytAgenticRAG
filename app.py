@@ -1,10 +1,15 @@
+import sys
+import youtube_transcript_api
+import time
+import random
 import os
 from youtube_transcript_api import YouTubeTranscriptApi
 from yt_dlp import YoutubeDL
 from openai import OpenAI
 import chromadb
 from dotenv import load_dotenv
-
+print("Python executable:", sys.executable)
+print("Transcript API location:", youtube_transcript_api.__file__)
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -18,20 +23,27 @@ def get_channel_video_ids(channel_url: str) -> list[str]:
     ydl_opts = {
         'extract_flat': True,
         'quiet': True,
-        'playlistend': 100
+        'playlistend': 20,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0'
+        }
     }
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(channel_url, download=False)
         entries = info.get('entries', [])
         return [entry['id'] for entry in entries if entry]
 
-def get_transcript(video_id: str):
-    try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
-        return " ".join([chunk['text'] for chunk in transcript])
-    except Exception as e:
-        print(f"Transcript error for {video_id}: {e}")
-        return None
+def get_transcript(video_id: str, retries=3):
+    for attempt in range(retries):
+        try:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            return " ".join([chunk['text'] for chunk in transcript])
+
+        except Exception as e:
+            print(f"Attempt {attempt+1} failed for {video_id}: {e}")
+            time.sleep(2 ** attempt)  # exponential backoff
+
+    return None
 
 def chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str]:
     words = text.split()
@@ -44,7 +56,7 @@ def chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str]
 
 def get_embeddings(texts: list[str]) -> list[list[float]]:
     response = client.embeddings.create(
-        model="text_embedding-3-small",
+        model="text-embedding-ada-002",
         input=texts
     )
     return [item.embedding for item in response.data]
